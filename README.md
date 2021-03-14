@@ -31,9 +31,6 @@
 * **[Monitorización](Scripts/Monitorización)**
     * **[Precios](Scripts/Precios)**
         * [Monitorización de precios en PCComponentes y Redcoon (Desactualizado)](Scripts/Monitorización/Precios/priceTracker.py)
-* **[Plex](Scripts/Plex)**
-    * [Descompartir bibliotecas](Scripts/Plex/Unshare_V3.sh)
-    * [Script en Python para descompartir bibliotecas](Scripts/Plex/Unshare_V3.sh)
 
 ## [Software](Software)
 * **[Gitea](Software/Gitea)**
@@ -56,21 +53,9 @@
 * **[Pi-Hole](Software/Pi-Hole)**
     * [Tutoriales](Software/Pi-Hole/Tutoriales)
         * [Dos Pi-Hole HA (High Availability) y sincronización](Software/Pi-Hole/Tutoriales/2_Pi-Hole_Servers.md)
-* **[Radarr](Software/Radarr)**
-    * [Profiles](Software/Radarr/Profiles)
-        * [DUAL](Software/Radarr/Profiles/Dual)
-* **[Sonarr](Software/Sonarr)**
-    * [Profiles](Software/Sonarr/Profiles)
-        * [Arreglo Español detectado como inglés](Software/Sonarr/Profiles/Spanish_detected_as_english)
-* **[Tautulli](Software/Tautulli)**
-    * [Notificaciones](Software/Tautulli/Notificaciones)
-        * [Telegram](Software/Tautulli/Notificaciones/Telegram)
 * **[Telegraf](Software/Nginx)**
     * [Configuración](Software/Telegraf/Config)
         * [Pre-activado y configurado](Software/Telegraf/Config/telegraf.conf)
-* **[Traktarr](Software/Nginx)**
-    * [Configuración](Software/Traktarr/Config)
-        * [Lista de nuevas películas/series para Sonarr y Radarr - 2020](Software/Traktarr/Config/config.json)
 
 ## [Torrents](Torrents)
 * [Listado](Torrents/Readme.md)
