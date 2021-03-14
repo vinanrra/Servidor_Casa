@@ -56,6 +56,3 @@
 * **[Telegraf](Software/Nginx)**
     * [Configuración](Software/Telegraf/Config)
         * [Pre-activado y configurado](Software/Telegraf/Config/telegraf.conf)
-
-## [Torrents](Torrents)
-* [Listado](Torrents/Readme.md)
