@@ -1,0 +1,257 @@
+version: "3.7"
+services:
+  7dtdserver:
+    image: vinanrra/7dtd-server
+    container_name: 7dtdserver
+    environment:
+      - START_MODE=1 #Change between START MODES
+      - VERSION=stable # Change between 7 days to die versions
+      - PUID=1000 # Remember to use same as your user
+      - PGID=1000 # Remember to use same as your user
+      - TimeZone=Europe/Madrid
+      - TEST_ALERT=YES
+      - ALLOC_FIXES=YES #Optional - Install ALLOC FIXES
+    volumes:
+      - ./7Days/ServerFiles:/home/sdtdserver/serverfiles/ #Optional, serverfiles
+      - ./7Days/7DaysToDie:/home/sdtdserver/.local/share/7DaysToDie/ #Optional, maps files
+      - ./7Days/log:/home/sdtdserver/log/ #Optional, logs
+      - ./7Days/backups:/home/sdtdserver/lgsm/backup/ #Optional, backups
+      - ./7Days/LGSM-Config:/home/sdtdserver/lgsm/config-lgsm/sdtdserver # Optional, alerts
+    ports:
+      - 26900:26900/tcp
+      - 26900:26900/udp
+      - 26901:26901/udp
+      - 26902:26902/udp
+      - 8080:8080/tcp #OPTIONAL WEBADMIN
+      - 8081:8081/tcp #OPTIONAL TELNET
+      - 8082:8082/tcp #OPTIONAL WEBSERVER https://7dtd.illy.bz/wiki/Server%20fixes
+    restart: unless-stopped #NEVER USE WITH START_MODE=4 or START_MODE=0
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - 9000:9000
+      - 8000:8000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: always
+  adminer:
+    image: adminer
+    container_name: adminer
+    restart: unless-stopped
+  db:
+    image: mysql
+    container_name: mySQL
+    env_file:
+      - ./MySQL/MySQL.env
+    ports:
+      - 3306:3306
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+  ddclient:
+    image: linuxserver/ddclient
+    container_name: ddclient
+    env_file:
+      - ./DDClient/ddclient.env
+    volumes:
+      - ./DDClient/config:/config
+    restart: unless-stopped
+  duckdns:
+    image: linuxserver/duckdns
+    container_name: duckdns
+    env_file:
+      - ./Duckdns/duckdns.env
+    volumes:
+      - ./Duckdns/config:/config
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - 3000:3000
+    environment:
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel,grafana-worldmap-panel
+    restart:
+      always
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    env_file:
+      - ./Gitea/Gitea.env
+    volumes:
+      - ./Gitea/data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      #- 3000:3000
+      - 222:22
+    restart: always
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - 8086:8086
+    volumes:
+      - ./Influxdb/config:/var/lib/influxdb
+    restart:
+      always
+  jackett:
+    image: linuxserver/jackett
+    container_name: jackett
+    env_file:
+      - ./Jackett/jackett.env
+    volumes:
+      - ./Jackett/config:/config
+    #ports:
+      #- 9117:9117
+    restart: unless-stopped
+  letsencrypt:
+    image: linuxserver/letsencrypt
+    container_name: letsencrypt
+    cap_add:
+      - NET_ADMIN
+    env_file:
+      - ./Nginx_SSL/web.env
+    volumes:
+      - ./Nginx_SSL/config:/config
+    ports:
+      - 443:443
+      - 80:80
+    restart: unless-stopped
+  plex:
+    image: linuxserver/plex
+    container_name: plex
+    env_file:
+      - ./Plex/Plex.env
+    volumes:
+      - ./Plex/config:/config
+      - /media/storage/home/vinanrra/Docker/Plex/tv:/tv
+      - /media/storage/home/vinanrra/Docker/Plex/peliculas:/movies
+      - /media/storage/home/vinanrra/Docker/Plex/transcode:/transcode
+      - /media/storage:/anime
+    restart: unless-stopped
+    network_mode: host
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    env_file:
+      - ./Radarr/Radarr.env
+    volumes:
+      - ./Radarr/config:/config
+      - /media/storage/home/vinanrra/Docker/Plex/descargas:/downloads/descargas
+      - /media/storage/home/vinanrra/Docker/Plex/tv:/tv
+      - /media/storage/home/vinanrra/Docker/Plex/peliculas:/movies
+      - /media/storage:/downloads/2TB
+      - /media/storage/home/vinanrra/Docker/Plex:/downloads
+    #ports:
+      #- 7878:7878
+    restart: unless-stopped
+  rclone:
+    image: pfidr/rclone
+    container_name: rclone
+    env_file:
+      - ./Rclone/Rclone.env
+    volumes:
+      - ./Rclone/config:/config
+      - ./Rclone/logs:/logs
+      - /media/storage/home/vinanrra/Backups:/source
+    restart: unless-stopped
+  rutorrent:
+    image: linuxserver/rutorrent:v3.9-ls70
+    container_name: rutorrent
+    env_file:
+      - ./rutorrent/rutorrent.env
+    volumes:
+      - ./rutorrent/config:/config
+      - /media/storage/home/vinanrra/Docker/Plex/tv:/downloads/tv
+      - /media/storage/home/vinanrra/Docker/Plex/peliculas:/downloads/peliculas
+      - /media/storage/Plex/Anime:/downloads/Anime
+      - /media/storage/home/vinanrra/Docker/Plex/descargas:/downloads/descargas
+      - /media/storage/home/vinanrra/Docker/Plex/ratio:/downloads/ratio
+    ports:
+      - 9080:80
+      - 5000:5000
+      - 51413:51413
+      - 6881:6881/udp
+    restart: unless-stopped
+  smartmontools:
+    image: mdhiggins/smartmontools
+    container_name: smartmontools
+    privileged: true
+    volumes:
+      - ./smartmontools/smartd.conf:/etc/smartd.conf
+      - ./smartmontools/ssmtp:/etc/ssmtp
+    restart: always
+  sonarr:
+    image: linuxserver/sonarr:preview
+    container_name: sonarr
+    env_file:
+      - ./Sonarr/Sonarr.env
+    volumes:
+      - ./Sonarr/config:/config
+      - /media/storage/home/vinanrra/Docker/Plex/descargas:/downloads/descargas
+      - /media/storage/home/vinanrra/Docker/Plex/tv:/downloads/tv
+      - /media/storage/home/vinanrra/Docker/Plex/peliculas:/downloads/peliculas
+      - /media/storage:/downloads/2TB
+    #ports:
+      #- 8989:8989
+    restart: unless-stopped
+  speedtest:
+    image: barrycarey/speedtest-for-influxdb-and-grafana
+    container_name: speedtest
+    volumes:
+      - ./SpeedTest/config.ini:/src/config.ini
+    restart: always
+  tautulli:
+    image: linuxserver/tautulli
+    container_name: tautulli
+    env_file:
+      - ./Tautulli/Tautulli.env
+    volumes:
+      - ./Tautulli/config:/config
+      - ./Tautulli/config/logs:/logs
+    #ports:
+    #  - 8181:8181
+    restart: unless-stopped
+  varken:
+    hostname: varken
+    container_name: varken
+    image: boerderij/varken
+    volumes:
+      - ./Varken/config:/config
+    env_file:
+      - ./Varken/Varken.env
+    depends_on:
+      - influxdb
+    restart: unless-stopped
+  nextcloud:
+    image: ghcr.io/linuxserver/nextcloud
+    container_name: nextcloud
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Madrid
+    volumes:
+      - ./Nextcloud/config:/config
+      - ./Nextcloud/data:/data
+    restart: unless-stopped
+  valheim:
+    container_name: valheim-server
+    image: lloesche/valheim-server
+    environment:
+      - SERVER_NAME=Zuperbicion
+      - WORLD_NAME=Dockerized
+      - SERVER_PASS=eresTonto
+      - SERVER_PUBLIC=false
+      - VALHEIM_PLUS=false
+      - TZ=Europe/Madrid
+    volumes:
+      - ./Valheim/config:/config
+      - ./Valheim/data:/opt/valheim
+    ports:
+      - 2456-2458:2456-2458/udp
+    restart: unless-stopped
+volumes:
+  portainer_data:

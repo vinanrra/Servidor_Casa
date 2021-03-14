@@ -1,0 +1,275 @@
+#! /bin/bash
+# Script was last updated 03-12-2019
+
+SCRIPTVER="pihole-gemini v0.0.2.2a"
+# --------------------------------------------------------------------------------------------------------
+# This script was written to try and keep the white and black lists in sync between two Pi-holes.
+
+# The script should be launched from /opt/pihole/gravity.sh
+# It should be called in the second to last line of the gravity.sh file and should be run as the user
+# configured for the sync process. In my case, I'm using user pi, so you would change the user from 'pi'
+# to the username you're using to sync the files (the user you're assigning to HAUSER in this script.)
+
+# Example of the line to add as the second to last line of the /opt/pihole/gravity.sh file:
+
+#       su -c '/usr/local/bin/pihole-gemini' - pi
+
+# In the above example, you change the 'pi' at the end to your sync user, and it should appear directly
+# above the line that reads:
+#       "${PIHOLE_COMMAND}" status
+# in the /opt/pihole/gravity.sh file.
+
+# --------------------------------------------------------------------------------------------------------
+# USER-DEFINED VARIABLES - START - Edit the values in this section to configure the script to your install.
+
+    # User account - Should have sudo and ssh access, and a "matching" account should be set up on both Pi-hole systems
+        HAUSER=pi
+
+    # Pi-hole directory (this path is expected to be the same on both Pi-holes, and should be where the FILES are located)
+        PIHOLEDIR=/etc/pihole
+
+    # IP Addresses - Note that removing the value or the variable definition of either SSHPORT will cause the script to
+                #    use the default SSH Port of 22 for connections to that ip address.
+        # Primary Pi-hole ip and ssh port
+            PIHOLE1=192.168.1.11
+            SSHPORT1=22
+
+        # Secondary Pi-hole ip and ssh port
+            PIHOLE2=192.168.1.12
+            SSHPORT2=22
+
+    # Define the local path to store the logfile, DO NOT include a trailing "/". Make sure this path is writeable by the user
+    # that runs the sync. Change this from /tmp to another folder to prevent logs from being cleared on system restart
+        LOGFILEPATH="/tmp"
+
+    # How long to keep old log files (in addition to the current day's log, so a value of 6 means 7 days)
+        LOGKEEPDAYS=6
+
+# USER-DEFINED VARIABLES - END - Edits made below this line may break the script.
+# ---------------------------------------------------------------------------------------------------------
+
+# SCRIPT VARIABLES - START - These values are used by the script and should not be changed manually.
+
+    # List of files to sync
+        FILES=(
+            'black.list'
+            'blacklist.txt'
+            'regex.list'
+            'whitelist.txt'
+            'lan.list'
+            'adlists.list'
+            'gravity.list'
+        )
+
+    # Full logfile path and name, uncluding timestamp
+        LOGFILE="${LOGFILEPATH}/pihole-gemini_`date +\%Y\%m\%d`.log"
+
+    # Flags used to determine script blocks to run.
+        # RUNUPDATE - 0 = Don't update; 1 = update Pi-holes
+        RUNUPDATE=0
+
+        # RESTART - 0 = Don't restart; 1 = restart
+        RESTART=0
+
+        # RUNGRAVITY - 0 = Don't update gravity; 1 = Update gravity (don't download lists)
+        RUNGRAVITY=0
+
+        # DEFAULT SSHPORT - This value is only provided here to use the default port of 22 if a port is not defined for the specified ip address
+        DEFAULTSSHPORT=22
+
+        # INITIALIZE PORT VARIABLES - This segment keeps the SSHPORT variables as set in the user-defined variables section. They are included here
+                                    # mainly as a fallback in case the variables are accidentally removed from the user-defined variables section.
+            SSHPORT1=$SSHPORT1
+            SSHPORT2=$SSHPORT2
+
+        # DETERMINE IP AND PORTS TO USE - START
+            # This section checks the interface used to connect to the local gateway, then determines the current ip address
+            # based on that interface. Finally, it checks the current ip address against the two addresses the script has
+            # configured to determine which one is the remote Pi-hole to send commands to, and configures the appropriate port.
+
+                LOCALIP=$PIHOLE1
+                    case $LOCALIP in
+                        $PIHOLE1)
+                            # echo "Local ip address matches PIHOLE1 ip, so the remote Pi-hole is PIHOLE2."
+                            REMOTEPI=$PIHOLE2
+                            if [ -z $SSHPORT2 ]; then
+                                # SSHPORT2 value is empty, use the default ssh port.
+                                SSHPORT=$DEFAULTSSHPORT
+                            else
+                                # SSHPORT2 value exists, use that for connections to PIHOLE2.
+                                SSHPORT=$SSHPORT2
+                            fi
+                        ;;
+                        $PIHOLE2)
+                            # echo "Local ip address matches PIHOLE2 ip, so the remote Pi-hole is PIHOLE1."
+                            REMOTEPI=$PIHOLE1
+                            if [ -z $SSHPORT1 ]; then
+                                # SSHPORT1 value is empty, use the default ssh port.
+                                SSHPORT=$DEFAULTSSHPORT
+                            else
+                                # SSHPORT1 value exists, use that for connections to PIHOLE1.
+                                SSHPORT=$SSHPORT1
+                            fi
+                        ;;
+                        *)
+                            echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+                            echo "* `date '+%Y-%m-%d %H:%M:%S'` - ERROR! - $SCRIPTVER was unable to determine the local ip address." 2>&1 | tee -a $LOGFILE
+                            echo "                                  This is a fatal error. Script can not continue. Please check your" 2>&1 | tee -a $LOGFILE
+                            echo "                                  configuration for the script, and make sure you are connected to" 2>&1 | tee -a $LOGFILE
+                            echo "                                  your router and have an ip address assigned." 2>&1 | tee -a $LOGFILE
+                            echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+                            REMOTEPI="Unknown"
+                            exit 1
+                        ;;
+                    esac
+
+        # DETERMINE IP AND PORTS TO USE - END
+
+# SCRIPT VARIABLES - END
+
+# LOG HEADER START - The following echo commands are for formatting purposes in the log file.
+    echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+    echo "`date '+%Y-%m-%d %H:%M:%S'` - $SCRIPTVER was successfully launched as user: $USER" 2>&1 | tee -a $LOGFILE
+    echo "                      $LOCALIP is updating Pi-hole on $REMOTEPI"
+    echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+# LOG HEADER - END
+
+# SSH CONNECTION TEST - START
+    echo "`date '+%Y-%m-%d %H:%M:%S'` - Testing SSH Connection to $HAUSER@$REMOTEPI. Please wait." 2>&1 | tee -a $LOGFILE
+
+    ssh -q -p $SSHPORT $HAUSER@$REMOTEPI exit
+    SSHSTATUS=$?
+
+        if [ $SSHSTATUS -eq 0 ]; then
+            # SSH is up
+            echo "`date '+%Y-%m-%d %H:%M:%S'` - SSH Connection to $HAUSER@$REMOTEPI was tested successfully." 2>&1 | tee -a $LOGFILE
+            RUNUPDATE=1
+
+        else
+            # SSH is down
+            echo "* `date '+%Y-%m-%d %H:%M:%S'` - ERROR! Unable to establish SSH connection as $HAUSER@$REMOTEPI on port $SSHPORT." 2>&1 | tee -a $LOGFILE
+            echo "*                       This is a fatal error as SSH is required for this script. Unable to update $REMOTEPI on port $SSHPORT." 2>&1 | tee -a $LOGFILE
+            echo "*                       $REMOTEPI may be offline, you may have specified the wrong port, or you have not correctly configured your SSH keys." 2>&1 | tee -a $LOGFILE
+            echo "*                       $REMOTEPI has NOT been updated."
+            RUNUPDATE=0
+        fi
+# SSH CONNECTION TEST - END
+
+# UPDATE REMOTE PIHOLE - START
+    if [ $RUNUPDATE -eq 1 ]; then
+    echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+
+    # FILE SYNC - START - This section handles compares the local and remote versions of the files specified in the $FILES variable
+                    #     and updates the remote files if neccesary.   
+        for FILE in ${FILES[@]}
+            do
+                if [[ -f $PIHOLEDIR/$FILE ]]; then
+                    echo "`date '+%Y-%m-%d %H:%M:%S'` - Comparing local to remote $FILE and updating if neccesary." 2>&1 | tee -a $LOGFILE
+
+                    RSYNC_COMMAND=$(rsync --rsync-path='/usr/bin/sudo /usr/bin/rsync' -aiu -e "ssh -l $HAUSER@$REMOTEPI -p$SSHPORT" $PIHOLEDIR/$FILE $HAUSER@$REMOTEPI:$PIHOLEDIR)
+
+                        if [[ -n "${RSYNC_COMMAND}" ]]; then
+                            # rsync copied changes so restart
+
+                            case $FILE in
+                                adlists.list)
+                                    # Updating adlists.list requires only a gravity update
+                                    echo "`date '+%Y-%m-%d %H:%M:%S'` - Updated $FILE on $REMOTEPI. Gravity will be updated on $REMOTEPI." 2>&1 | tee -a $LOGFILE
+                                    RUNGRAVITY=1
+                                ;;
+
+                                gravity.list)
+                                    # Updating gravity.list requires only a gravity update
+                                    echo "`date '+%Y-%m-%d %H:%M:%S'` - Updated $FILE on $REMOTEPI. Gravity will be updated on $REMOTEPI." 2>&1 | tee -a $LOGFILE
+                                    RUNGRAVITY=1
+                                ;;
+
+                                *)
+                                    # Updating white and/or black lists (or other files) requires a remote restart but not a gravity update
+                                    echo "`date '+%Y-%m-%d %H:%M:%S'` - Updated $FILE on $REMOTEPI. $REMOTEPI will be restarted." 2>&1 | tee -a $LOGFILE
+                                    RESTART=1
+                                ;;
+                            esac
+
+                        else
+                            # no changes so do nothing
+                            echo "`date '+%Y-%m-%d %H:%M:%S'` - Local file $FILE matches $FILE on $REMOTEPI. Remote file was not updated." 2>&1 | tee -a $LOGFILE
+                        fi
+
+                else
+                    # file does not exist, skipping
+                    echo "`date '+%Y-%m-%d %H:%M:%S'` - Local file $FILE does not exist. Skipping." 2>&1 | tee -a $LOGFILE
+                fi
+            done
+    # FILE SYNC - END
+
+    # RESTART REMOTEPI (IF NEEDED) - START
+        if [ $RESTART -eq 1 ]; then
+            echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+            echo "`date '+%Y-%m-%d %H:%M:%S'` - Updated files have been copied to $REMOTEPI. Restarting..." 2>&1 | tee -a $LOGFILE
+
+            echo "`date '+%Y-%m-%d %H:%M:%S'` - Sending restart command to pihole-FTL on $REMOTEPI." 2>&1 | tee -a $LOGFILE
+
+            ssh $HAUSER@$REMOTEPI -p $SSHPORT "sudo -S service pihole-FTL restart"
+            if [ $? -ne 0 ]; then
+                echo "* `date '+%Y-%m-%d %H:%M:%S'` - ERROR! - Unable to restart pihole-FTL service on $REMOTEPI." 2>&1 | tee -a $LOGFILE
+
+            else
+                echo "`date '+%Y-%m-%d %H:%M:%S'` - Successfully restarted pihole-FTL service on $REMOTEPI." 2>&1 | tee -a $LOGFILE
+            fi
+        fi
+    # RESTART REMOTEPI - END
+
+    # UPDATE REMOTE GRAVITY (IF NEEDED) - START
+    echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+        case $RUNGRAVITY in
+            0)
+                # Gravity did not need updating - do nothing
+                echo "`date '+%Y-%m-%d %H:%M:%S'` - Gravity on $REMOTEPI did not need updating." 2>&1 | tee -a $LOGFILE
+            ;;
+            1)
+                # Gravity needs refreshing, but not a full update - Update gravity without redownloading lists
+                echo "`date '+%Y-%m-%d %H:%M:%S'` - Refreshing gravity on $REMOTEPI. Lists will not be redownloaded." 2>&1 | tee -a $LOGFILE
+                ssh $HAUSER@$REMOTEPI -p $SSHPORT "sudo -S pihole -g --skip-download"
+                if [ $? -ne 0 ]; then
+                    echo "* `date '+%Y-%m-%d %H:%M:%S'` - ERROR! - Unable to refresh gravity on $REMOTEPI." 2>&1 | tee -a $LOGFILE
+
+                else
+                    echo "`date '+%Y-%m-%d %H:%M:%S'` - Success! Successfully refreshed gravity on $REMOTEPI." 2>&1 | tee -a $LOGFILE
+                fi
+            ;;
+        esac
+    # UPDATE REMOTE GRAVITY - END
+
+    # CLEAN OLD LOG FILES - START
+        # Check the LOGFILEPATH for outdated log files and delete old logs
+        echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+        echo "`date '+%Y-%m-%d %H:%M:%S'` - Checking ${LOGFILEPATH} for outdated log files." 2>&1 | tee -a $LOGFILE
+
+        look_in="${LOGFILEPATH}/pihole-gemini_*.log"
+
+        del_file=`find $look_in ! -wholename $LOGFILE -daystart -mtime +$LOGKEEPDAYS`
+        if [ -z "$del_file" ]; then
+            echo "`date '+%Y-%m-%d %H:%M:%S'` - There were no outdated log files to remove." 2>&1 | tee -a $LOGFILE
+
+        else
+            echo "`date '+%Y-%m-%d %H:%M:%S'` - Outdated log file(s) found. Removing..." 2>&1 | tee -a $LOGFILE
+            sudo find $look_in ! -wholename $LOGFILE -daystart -mtime +$LOGKEEPDAYS -prune -exec rm -rv "{}" \;
+            if [ $? -ne 0 ]; then
+                echo "`date '+%Y-%m-%d %H:%M:%S'` - ERROR! Unable to remove outdated log files from $LOGFILEPATH." 2>&1 | tee -a $LOGFILE
+            else
+                echo "`date '+%Y-%m-%d %H:%M:%S'` - Outdated log files successfully cleaned." 2>&1 | tee -a $LOGFILE
+            fi
+        fi
+    # CLEAN OLD LOG FILES - END
+
+    fi
+# UPDATE REMOTE PIHOLE - END
+
+# LOG FOOTER - START
+    echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+    echo "`date '+%Y-%m-%d %H:%M:%S'` - $SCRIPTVER completed update of $REMOTEPI from $LOCALIP." 2>&1 | tee -a $LOGFILE
+    echo "--------------------------------------------------------------------------------------------" 2>&1 | tee -a $LOGFILE
+# LOG FOOTER - END
+
+# END OF SCRIPT

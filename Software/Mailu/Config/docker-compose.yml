@@ -1,0 +1,160 @@
+version: '3.7'
+services:
+  letsencrypt:
+    image: linuxserver/letsencrypt
+    container_name: LetsEncrypt
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Madrid
+      - URL=raventech.es
+      - SUBDOMAINS=www,portainer,openvpn,nextcloud,mail
+      - VALIDATION=http
+      #- DNSPLUGIN=cloudflare #optional
+      #- DUCKDNSTOKEN=<token> #optional
+      #- EMAIL=<e-mail> #optional
+      - DHLEVEL=2048 #optional
+      - ONLY_SUBDOMAINS=false #optional
+      #- EXTRA_DOMAINS=<extradomains> #optional
+      - STAGING=false #optional
+    volumes:
+      - ./Web/config:/config
+    ports:
+      - 443:443
+      - 80:80 #optional
+    restart: unless-stopped
+  db:
+    image: mysql
+    container_name: MySQL
+    environment:
+      - MYSQL_ROOT_PASSWORD=XXXXXX
+    ports:
+      - 3306:3306
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - ./MySQL/mysql:/var/lib/mysql
+    restart: always
+  adminer:
+    image: adminer
+    container_name: adminer
+   # environment:
+      # - ADMINER_PLUGINS=designs
+      #- ADMINER_DESIGN=brade
+    #volumes:
+      #- ./Adminer/plugins-enabled/designs.php:/var/www/html/plugins-enabled/designs.php:ro
+    #ports:
+      #- 8080:8080
+    restart: always
+  # External dependencies
+  redis:
+    image: redis:alpine
+    container_name: mailu_redis
+    restart: always
+    volumes:
+      - "./Mailu/redis:/data"
+    
+  # Core services
+  front:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}nginx:${MAILU_VERSION:-1.7}
+    container_name: mailu_front
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: json-file
+    ports:
+      #- 8080:80
+      #- 8443:443
+      - "62.171.174.123:25:25"
+      - "62.171.174.123:465:465"
+      - "62.171.174.123:587:587"
+      - "62.171.174.123:110:110"
+      - "62.171.174.123:995:995"
+      - "62.171.174.123:143:143"
+      - "62.171.174.123:993:993"
+    volumes:
+      # Certificados de letsencrypt usar con variable "mail"
+      #- "./Web/config/etc/letsencrypt/live/raventech.es:/certs"
+      # Actualmente están copiados a manos los certificados, caducan el 21 de Julio de 2020
+      # Averiguar manera de usar los del contenedor "LetsEncrypt"
+      # puede que haya problemas en Mailu al serguir los symlinks
+      - "./Mailu/certs:/certs" 
+      - "./Mailu/overrides/nginx:/overrides"
+  admin:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}admin:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_admin
+    volumes:
+      - "./Mailu/data:/data"
+      - "./Mailu/dkim:/dkim"
+    depends_on:
+      - redis
+  imap:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}dovecot:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_imap
+    volumes:
+      - "./Mailu/mail:/mail"
+      - "./Mailu/overrides:/overrides"
+    depends_on:
+      - front
+  smtp:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}postfix:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_smtp
+    volumes:
+      - "./Mailu/overrides:/overrides"
+    depends_on:
+      - front
+  antispam:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}rspamd:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_antispam
+    volumes:
+      - "./Mailu/filter:/var/lib/rspamd"
+      - "./Mailu/dkim:/dkim"
+      - "./Mailu/overrides/rspamd:/etc/rspamd/override.d"
+    depends_on:
+      - front
+  # Optional services
+  antivirus:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}clamav:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_antivirus
+    volumes:
+      - "./Mailu/filter:/data"
+  webdav:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}radicale:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_webdav
+    volumes:
+      - "./Mailu/dav:/data"
+  fetchmail:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}fetchmail:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_fetchmail
+  # Webmail
+  webmail:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}roundcube:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    container_name: mailu_webmail
+    volumes:
+      - "./Mailu/webmail:/data"
+    depends_on:
+      - imap
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.203.0/24
