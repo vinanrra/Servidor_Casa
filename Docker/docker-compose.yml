@@ -253,5 +253,105 @@ services:
     ports:
       - 2456-2458:2456-2458/udp
     restart: unless-stopped
+  traefik:
+    image: "traefik:v2.2"
+    container_name: Traefik
+    # Fuente: https://blog.creekorful.com/2020/01/how-to-expose-traefik-2-dashboard-securely-docker-swarm/
+    command:
+      # Habilita la API
+      - "--api=true"
+      # Habilita el panel de control
+      - "--api.dashboard=true"
+      # Le decimos a Traefik que usamos Docker
+      - "--providers.docker=true"
+      # Los contenedores sin la label "traefik.enable=true" los ignora
+      - "--providers.docker.exposedbydefault=false"
+      # Puertos
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      ## Redireccion HTTP a HTTPS
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      ## Redireccion HTTP a HTTPS
+      ## Certificados SSL
+      # Use the HTTP-01 challenge to generate and renew ACME certificates by provisioning an HTTP resource under a well-known URI.
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge=true"
+      # Tipo de verificacion
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge.entrypoint=web"
+      # Correo asociado
+      - "--certificatesresolvers.letsencryptresolver.acme.email=XXX@XXX.com"
+      # Donde guardarlo
+      - "--certificatesresolvers.letsencryptresolver.acme.storage=/letsencrypt/acme.json"
+      ## Certificados SSL
+    labels:
+      # Activamos la deteccion
+      - "traefik.enable=true"
+      # Ruta de acceso al panel
+      - "traefik.http.routers.traefik.rule=Host(`traefik.XXX.XX`)"
+      # Nombre de la entrada, debe concidir con "--entrypoints.websecure.address=:443"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      # Nombre del generador de SSL que usaremos, debe coincidir con "--certificatesresolvers.letsencryptresolver...""
+      - "traefik.http.routers.traefik.tls.certresolver=letsencryptresolver"
+      # Al activar la API con "--api=true", se genera un servicio llamado "api@internal" y debe ser referenciado en la ruta
+      - "traefik.http.routers.traefik.service=api@internal"
+      # Nombre del middlewares, puede ser cualquiera
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      # Usuarios, el nombre de "traefik.http.middlewares.[NOMBRE]..." debe ser igual al middleware creado
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=XXX:XXXX."
+      # Especificamos la red a usar, para evitar problemas de enrutamiento
+      # Without that flag traefik would randomly choose a network (usually the wrong one).
+      - "traefik.docker.network=frontend"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Carpeta de certificados
+      - "./Traefik/Data/Letsencrypt:/letsencrypt"
+      # Socket Docker
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks: 
+      - frontend
+  mysql:
+    image: mysql
+    container_name: Mysql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=XXXX
+    #ports:
+      #- 3306:3306
+    networks:
+      - backend
+  wordpress:
+    image: wordpress
+    container_name: Wordpress
+    depends_on: 
+      - mysql
+    labels:
+      # Ruta por la cual se entrara al contenedor, traefik al leer esa web, desviara a Wordpress
+      - traefik.http.routers.wordpress.rule=Host(`XXXX.XXX`)
+      # Tipo de entrada, en este caso HTTPS, llamada para nosotros "websecure"
+      - traefik.http.routers.wordpress.entrypoints=websecure
+      # Nuestro generador de certificados TLS, en este caso llamada para nosotros "letsencryptresolver"
+      - traefik.http.routers.wordpress.tls.certresolver=letsencryptresolver
+      # Activaremos la deteccion de Traefik
+      - traefik.enable=true
+      # Puerto que usa nuestro contenedor, por el cual Traefik se conectara, se debe especificar para poder conectarse
+      - traefik.port=80
+    restart: always
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: XXXXX
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - ./Wordpress/Data/Html:/var/www/html
+    networks: 
+     - frontend
+     - backend
+networks:
+  frontend:
+  backend:
 volumes:
   portainer_data:
