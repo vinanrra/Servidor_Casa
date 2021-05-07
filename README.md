@@ -1,7 +1,7 @@
 # Servidor
 ## Índice
 
-### [Configuraciones iniciales](Config_Inicial)
+## [Configuraciones iniciales](Config_Inicial)
 * **[Swap](Config_Inicial/Swap)**
     * [Cambiar swap](Config_Inicial/Swap/Cambiar_Swap.md)
 * **[Red](Config_Inicial/Red)**
