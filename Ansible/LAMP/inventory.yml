@@ -1,0 +1,18 @@
+---
+
+# INFO -> https://docs.ansible.com/ansible/latest/network/getting_started/first_inventory.html
+
+# Group name
+racknerd:
+  # Racknerd hosts
+  hosts:
+    # Name
+    racknerd_ombi:
+      # Variables
+      ansible_host: 000.000.000.000 # IP
+      ansible_password: PASSWORD # Not the best way to store passwords better -> https://docs.ansible.com/ansible/latest/network/getting_started/first_inventory.html#network-vault
+      ansible_sudo_pass: PASSWORD # Not the best way to store passwords better -> https://docs.ansible.com/ansible/latest/network/getting_started/first_inventory.html#network-vault
+      ansible_python_interpreter: /usr/bin/python3 # Python interpreter path
+  # Global variable for "racknerd" group
+  vars:
+    ansible_user: vinanrra
