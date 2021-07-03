@@ -17,10 +17,6 @@
 * **Configuración especial**
     * [Smartmontools](Docker/smartmontools)
 
-## [Ansible](Ansible)
-* **[Playbooks](Ansible)**
-    * [Darkhold](Ansible/Darkhold_Kahoot)
-    * [LAMP](Ansible/LAMP)
 ## [Scripts](Scripts)
 * **[Copias de seguridad](Scripts/Backup)**
     * **[Docker](Scripts/Docker)**
