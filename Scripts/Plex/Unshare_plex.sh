@@ -4,6 +4,8 @@ dir=/XXX/XXXX/XXXX/
 
 # Save current date to variable
 curr_date=$(date +'%d-%m-%Y')
+# Obtain the date in seconds
+# %s   seconds since 1970-01-01 00:00:00 UTC
 curr_date_S=$(date +%s)
 
 # Array list with users
@@ -26,11 +28,14 @@ for index in ${!lista[*]}; do
       todate="${BASH_REMATCH[5]}"
     fi
 
+    # Save date of user date in seconds
     todate_S=$(date +%s -d "$todate")
+    # Calculate de difference between dates
     ((diff_sec=todate_S-curr_date_S))
 
-      # If current date is the same as "todate" unshare, if not save info to log
+      # If current date is the same or older than "todate" unshare, if not save info to log
       # Using -lt (less than)
+      # If diff_sec its less than 1
     if [[ "diff_sec" -lt "1" ]];
       then
           # Unshare library and save info to log
