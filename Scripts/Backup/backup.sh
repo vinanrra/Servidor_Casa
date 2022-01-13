@@ -9,6 +9,8 @@ carpetas=(
 
 for index in ${!carpetas[*]}; do 
 
+    mkdir -p $dir/${carpetas[$index]}
+
     if [ ${carpetas[$index]} = Plex ];
     then
         echo "
