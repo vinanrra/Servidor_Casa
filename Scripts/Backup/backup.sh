@@ -1,151 +1,55 @@
 #!/bin/bash
-dir=<PATH_TO_SAVE_BACKUPS>
-dirHome=<PATH_FOLDERS_TO_BACKUP>
-carpetas=(
-  folder1
-  folder2
-  folder3
-)
 
-for index in ${!carpetas[*]}; do 
+# Specify the directory containing the folders to backup
+backup_dir="/path/to/folder"
 
-    mkdir -p $dir/${carpetas[$index]}
+# Check if the backup directory exists
+if [ ! -d "$backup_dir" ]; then
+    echo "Source directory does not exist."
+    exit 1
+fi
 
-    if [ ${carpetas[$index]} = Plex ];
-    then
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} iniciada.
+# Create a backup directory if it doesn't exist
+backup_dest="/path/to/store"
+mkdir -p "$backup_dest"
 
-            =======================================================================
-            "
-        echo ".dump metadata_item_settings" | sqlite3 $dirHome/Plex/config/Library/Application\ Support/Plex\ Media\ Server/Plug-in\ Support/Databases/com.plexapp.plugins.library.db | grep -v TABLE | grep -v INDEX > $dir/Plex/$(date +%m.%d.%H.%M)PlexDatabase.sql
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} finalizada.
+# Get current date and time
+timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
 
-            =======================================================================
-            "
-    
-    elif [ ${carpetas[$index]} = Kanboard ]
-    then
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} iniciada.
+# Specify the names of folders to ignore (space-separated list)
+ignore_folders=("noBackups")
 
-            =======================================================================
-            "
-        sqlite3 $dirHome/Nginx_SSL/config/www/Kanboard/data/db.sqlite ".backup $dir/Kanboard/Kanboard.$(date +%m.%d.%H.%M).data.sqlite"
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} finalizada.
+# Set hashed password for the archive
+password="CHANGE_ME"
 
-            =======================================================================
-            "
-    
-    elif [ ${carpetas[$index]} = Crontab ]
-    then
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} iniciada.
+# Loop through each folder in the source directory
+for folder in "$backup_dir"/*; do
+    # Check if the item is a directory
+    if [ -d "$folder" ]; then
+        # Extract folder name from full path
+        folder_name=$(basename "$folder")
 
-            =======================================================================
-            "
-        crontab -l > $dir/${carpetas[$index]}/Crontab.$(date +%m.%d.%H.%M).txt
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} finalizada.
-
-            =======================================================================
-            "
-    elif [ ${carpetas[$index]} = Sonarr ]
-    then
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} iniciada.
-
-            =======================================================================
-            "
-        tar --exclude='Sonarr/config/MediaCover' -C $dirHome -pzvcf $dir/${carpetas[$index]}/${carpetas[$index]}.$(date +%m.%d.%H.%M).tar.gz ${carpetas[$index]}
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} finalizada.
-
-            =======================================================================
-            "
-   
-    elif [ ${carpetas[$index]} = Radarr ]
-    then
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} iniciada.
-
-            =======================================================================
-            "
-        tar --exclude='Radarr/config/MediaCover' -C $dirHome -pzvcf $dir/${carpetas[$index]}/${carpetas[$index]}.$(date +%m.%d.%H.%M).tar.gz ${carpetas[$index]}
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} finalizada.
-
-            =======================================================================
-            "
-   
-    else
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} iniciada.
-
-            =======================================================================
-            "
-        tar -C $dirHome -pzvcf $dir/${carpetas[$index]}/${carpetas[$index]}.$(date +%m.%d.%H.%M).tar.gz ${carpetas[$index]}
-        echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Copia de ${carpetas[$index]} finalizada.
-
-            =======================================================================
-            "
+        # Check if the folder name is not in the list of folders to ignore
+        if [[ ! " ${ignore_folders[@]} " =~ " $folder_name " ]]; then
+            # Create a backup tar.gz file with timestamp
+            backup_file="$backup_dest/${folder_name}_${timestamp}.7z"
+            echo "Creating backup for $folder_name in $backup_file"
+            # tar -czf "$backup_file" -C "$backup_dir" "$folder_name"
+            7z a -p$password -r "$backup_file" "$folder" -x!*/config/MediaCover/*
+            if [ $? -eq 0 ]; then
+                echo "Backup created successfully."
+            else
+                echo "Failed to create backup."
+            fi
+        else
+            echo "Ignoring folder $folder_name"
+        fi
     fi
-
-    echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Borrado de archivos de mas de 7 dias iniciado de ${carpetas[$index]}.
-
-            =======================================================================
-            "
-    find $dir/${carpetas[$index]}/ -mtime +7 -exec rm {} \;
-    echo "
-            =======================================================================
-            IMPORTANTANTE:
-            
-            Borrado de archivos de mas de 7 dias finalizado de ${carpetas[$index]}.
-
-            =======================================================================
-            "
-
 done
+
+echo "All backups completed."
+
+# Delete backups older than 7 days
+echo "Deleting backups older than 7 days..."
+find "$backup_dest" -type f -name "*.7z" -mtime +7 -delete
+echo "Deletion complete"
