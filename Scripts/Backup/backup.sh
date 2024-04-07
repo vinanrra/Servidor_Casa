@@ -34,7 +34,7 @@ for folder in "$backup_dir"/*; do
             # Create a backup tar.gz file with timestamp
             backup_file="$backup_dest/${folder_name}_${timestamp}.7z"
             echo "Creating backup for $folder_name in $backup_file"
-            # tar -czf "$backup_file" -C "$backup_dir" "$folder_name"
+            # tar -czf "$backup_file" -C "$backup_dir" "$folder_name" -xFolderOrSubfoldersToIgnore
             7z a -p$password -r "$backup_file" "$folder" -x!*/config/MediaCover/*
             if [ $? -eq 0 ]; then
                 echo "Backup created successfully."
